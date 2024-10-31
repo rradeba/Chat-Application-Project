@@ -8,36 +8,105 @@
 </head>
 <body>
     <h1>Flask-SocketIO Chat</h1>
-    <ul id="messages"></ul>
-    <form id="messages-form">
-        <input type="text" id="author-input" autocomplete="off" placeholder="Your name">
-        <input type="text" id="message-input" autocomplete="off" placeholder="Message">
-        <button type="submit">Send</button>
+    <form id="join-form">
+        <input type="text" id="username" placeholder="Your name" required>
+        <input type="text" id="room" placeholder="Room name" required>
+        <button type="submit">Join Room</button>
     </form>
+    
+    <div id="chat-section" style="display:none;">
+        <h2>Room: <span id="room-name"></span></h2>
+        <ul id="messages"></ul>
+        <form id="message-form">
+            <input type="text" id="message-input" autocomplete="off" placeholder="Message" required>
+            <button type="submit">Send</button>
+        </form>
+    </div>
 
     <script>
         const socket = io();
-        const form = document.getElementById('messages-form');
-        const authorInput = document.getElementById('author-input');
+        const joinForm = document.getElementById('join-form');
+        const messageForm = document.getElementById('message-form');
+        const usernameInput = document.getElementById('username');
+        const roomInput = document.getElementById('room');
         const messageInput = document.getElementById('message-input');
         const messages = document.getElementById('messages');
+        const chatSection = document.getElementById('chat-section');
+        const roomNameDisplay = document.getElementById('room-name');
 
-        form.addEventListener('submit', function(event) {
+        
+        joinForm.addEventListener('submit', function(event) {
             event.preventDefault();
-            const author = authorInput.value.trim();
-            const message = messageInput.value.trim();
+            const username = usernameInput.value.trim();
+            const room = roomInput.value.trim();
 
-            if (author !== '' && message !== '') {
-                socket.emit('message', { author: author, message: message });
-                messageInput.value = ''; 
+            if (username && room) {
+                socket.emit('join', { username: username, room: room });
+                roomNameDisplay.textContent = room;
+                chatSection.style.display = 'block';
+                joinForm.style.display = 'none';
             }
         });
 
-        socket.on('message', function(data) {
-            const li = document.createElement('li');
-            li.textContent = `${data.author}: ${data.message}`;  // Format the message
-            messages.appendChild(li);
+       
+        messageForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const message = messageInput.value.trim();
+            const author = usernameInput.value.trim();
+            const room = roomNameDisplay.textContent;
+
+            if (message) {
+                socket.emit('message', { username: author, message: message, room: room });
+                messageInput.value = '';
+            }
         });
+
+        
+        socket.on('message', function(data) {
+        const li = document.createElement('li');
+        li.textContent = `${data.username}: ${data.message}`;
+        li.setAttribute('data-id', data.id);
+        li.innerHTML += `
+            <button onclick="editMessage('${data.id}')">Edit</button>
+            <button onclick="deleteMessage('${data.id}')">Delete</button>
+        `;
+        messages.appendChild(li);
+    });
+
+        
+        function editMessage(id) {
+            const messageElement = document.querySelector(`li[data-id='${id}']`);
+            const currentMessage = messageElement.firstChild.textContent.split(': ')[1]; 
+            const newMessage = prompt("Edit message:", currentMessage);
+            if (newMessage !== null && newMessage.trim() !== '') {
+                const username = usernameInput.value.trim();
+                const room = roomNameDisplay.textContent;
+                socket.emit('edit_message', { id: id, username: username, message: newMessage, room: room });
+            }
+        }
+
+        
+        function deleteMessage(id) {
+        const username = usernameInput.value.trim();
+        const room = roomNameDisplay.textContent;
+        if (confirm("Delete message?")) {
+            socket.emit('delete_message', { id: id, username: username, room: room });
+        }
+    }
+
+       
+        socket.on('edit_message', function(data) {
+            const messageElement = document.querySelector(`li[data-id='${data.id}']`);
+            messageElement.firstChild.textContent = `${data.username}: ${data.message}`; 
+        });
+
+       
+        socket.on('delete_message', function(data) {
+        const messageElement = document.querySelector(`li[data-id='${data.id}']`);
+        if (messageElement) {
+            messages.removeChild(messageElement); 
+        }
+    });
     </script>
 </body>
 </html>
